@@ -104,7 +104,7 @@ end
 function Connection:_get_sockpath()
   local sockpath = os.getenv("SWAYSOCK") or os.getenv("I3SOCK")
   if sockpath == nil then
-    error("Neither of SWAYSOCK nor I3_SOCKE_PATH environment variables are defined")
+    error("Neither of SWAYSOCK nor I3SOCK environment variables are defined")
   end
   return sockpath
 end
