@@ -13,7 +13,6 @@ _TODO_
 ## Example
 
 ```lua
-local inspect = require"inspect"
 local i3 = require"i3ipc"
 local EVENT, COMMAND, Connection = i3.EVENT, i3.COMMAND, i3.Connection
 
