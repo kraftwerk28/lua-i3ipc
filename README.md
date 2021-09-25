@@ -9,16 +9,20 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
 ### Note: this is a very alpha piece of software!
 
 
-## Installation
+## Installation and running the script
 _TODO_
 
 
 ## API
 
-### `main()`
+### `main(callback)`
 The entry point of the library, which you typically would use
 Takes a callback with one parameter, `Connection`
 
+**Parameters:**
+- `callback`: `function` - function with one parameter (`Connection`)
+
+Example:
 ```lua
 require"i3ipc".main(function(conn)
   -- Invoke methods on `conn`
