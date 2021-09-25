@@ -6,15 +6,13 @@ package.cpath = package.cpath..";"..
 
 local inspect = require"inspect"
 local i3 = require"i3ipc"
-local EVENT, COMMAND, Connection = i3.EVENT, i3.COMMAND, i3.Connection
+local EVENT, CMD = i3.EVENT, i3.COMMAND
 
-i3.main(function()
-  local conn = Connection:new()
-  local function handler(event)
+i3.main(function(conn)
+  conn:subscribe_once(EVENT.WORKSPACE, function(event)
     conn:send(
-      COMMAND.RUN_COMMAND,
+      CMD.RUN_COMMAND,
       ("exec notify-send 'switched to workspace %d'"):format(event.current.name)
     )
-  end
-  conn:subscribe(EVENT.WORKSPACE, handler)
+  end)
 end)

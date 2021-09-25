@@ -62,6 +62,7 @@ function Connection:new()
     subscriptions = {},
     incoming_messages = {},
     coro = co,
+    main_finished = false,
   }, self)
   conn:_start_read()
   return conn
@@ -88,7 +89,17 @@ function Connection:unsubscribe(event, callback)
   local event_id = event[1]
   if (self.subscriptions[event_id] or {})[callback] then
     self.subscriptions[event_id][callback] = nil
+    if not self:_has_subscriptions() then
+      self:_stop()
+    end
     return true
+  end
+  return false
+end
+
+function Connection:_has_subscriptions()
+  for _, callbacks in pairs(self.subscriptions) do
+    if next(callbacks) ~= nil then return true end
   end
   return false
 end
@@ -161,17 +172,32 @@ function Connection:_start_read()
   self.pipe:read_start(read_handler)
 end
 
+function Connection:_stop()
+  uv.stop()
+end
+
+function Connection:cmd(command)
+  return self:send(COMMAND.RUN_COMMAND, command)
+end
+
 local function main(fn)
   coroutine.wrap(function()
-    fn()
-    -- uv.stop()
+    local conn = Connection:new()
+    fn(conn)
+    if conn:_has_subscriptions() then
+      conn.main_finished = true
+    else
+      conn:_stop()
+    end
   end)()
 
-  local s = uv.new_signal()
-  s:start("sigint", function()
-    print("Exiting...")
+  local function handle_signal()
     uv.stop()
-  end)
+  end
+  for _, signal in ipairs{"sigint", "sigterm"} do
+    local s = uv.new_signal()
+    s:start(signal, handle_signal)
+  end
 
   uv.run()
 end
