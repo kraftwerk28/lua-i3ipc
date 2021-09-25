@@ -22,6 +22,10 @@ local COMMAND = {
   SEND_TICK = 10, -- Sends a tick event with the specified payload.
   SYNC = 11, -- Sends an i3 sync event with the specified random value to the specified window.
   GET_BINDING_STATE = 12, -- Request the current binding state, i.e. the currently active binding mode name.
+
+  -- Sway-only
+  GET_INPUTS = 100,
+  GET_SEATS = 100,
 }
 
 local EVENT = {
@@ -62,6 +66,7 @@ function Connection:new()
     subscriptions = {},
     incoming_messages = {},
     coro = co,
+    send_awaiters = {},
     main_finished = false,
   }, self)
   conn:_start_read()
@@ -71,6 +76,7 @@ end
 function Connection:send(type, payload)
   local event_id = type
   local msg = serialize(event_id, payload)
+  table.insert(self.send_awaiters, coroutine.running())
   self.pipe:write(msg)
   local _, payload = coroutine.yield()
   return payload
@@ -106,8 +112,8 @@ end
 
 function Connection:subscribe_once(event, callback)
   local function handler(...)
-    self:unsubscribe(event, handler)
     callback(...)
+    assert(self:unsubscribe(event, handler))
   end
   self:subscribe(event, handler)
 end
@@ -125,13 +131,13 @@ function Connection:_process_message(type, raw_payload)
   if bit.band(bit.rshift(type, 31), 1) == 1 then
     coroutine.wrap(function()
       local event_id = bit.band(type, 0x7f)
-      -- local real_type = bit.band(type, 0x7f)
       for callback, _ in pairs(self.subscriptions[event_id] or {}) do
-        callback(payload)
+        callback(self, payload)
       end
     end)()
   else
-    coroutine.resume(self.coro, type, payload)
+    local co = table.remove(self.send_awaiters, 1)
+    coroutine.resume(co, type, payload)
   end
 end
 

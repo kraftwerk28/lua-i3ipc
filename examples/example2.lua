@@ -3,16 +3,13 @@ package.path = package.path..";"..
   os.getenv("HOME").."/.luarocks/share/lua/"..version.."/?.lua;"
 package.cpath = package.cpath..";"..
   os.getenv("HOME").."/.luarocks/lib/lua/"..version.."/?.so;"
-
-local inspect = require"inspect"
 local i3 = require"i3ipc"
-local EVENT, CMD = i3.EVENT, i3.COMMAND
 
 i3.main(function(conn)
-  conn:subscribe(EVENT.WORKSPACE, function(_, event)
-    conn:send(
-      CMD.RUN_COMMAND,
-      ("exec notify-send 'switched to workspace %d'"):format(event.current.name)
-    )
+  conn:subscribe(i3.EVENT.WINDOW, function(conn, event)
+    if event.container.name:match("Alacritty") then
+      -- conn:cmd(("[con_id=%d] focus"):format(event.container.id))
+      conn:cmd("floating enable")
+    end
   end)
 end)
