@@ -55,7 +55,7 @@ Subscribe to event.
 
 **Parameters:**
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
-- `callback`: `function` - function with one parameter (event)
+- `callback`: `function` - function with two parameters: `Connection` and event
 
 Example:
 ```lua
@@ -69,7 +69,7 @@ Subscribe to event, unsubscribe after one is received.
 
 **Parameters:**
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
-- `callback`: `function` - function with one parameter (event)
+- `callback`: `function` - function with two parameters: `Connection` and event
 
 ### `Connection:unsubscribe(event, callback)`
 Remove subscribtion to event.
