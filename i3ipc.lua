@@ -64,7 +64,6 @@ function Connection:new()
   local conn = setmetatable({
     pipe = pipe,
     subscriptions = {},
-    incoming_messages = {},
     coro = co,
     send_awaiters = {},
     main_finished = false,
@@ -95,7 +94,7 @@ function Connection:unsubscribe(event, callback)
   local event_id = event[1]
   if (self.subscriptions[event_id] or {})[callback] then
     self.subscriptions[event_id][callback] = nil
-    if not self:_has_subscriptions() then
+    if not self:_has_subscriptions() and self.main_finished then
       self:_stop()
     end
     return true
