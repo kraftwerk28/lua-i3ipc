@@ -1,10 +1,4 @@
 #!/usr/bin/env luajit
-local version = _VERSION:match("%d+%.%d+")
-package.path = package.path..";"..
-  os.getenv("HOME").."/.luarocks/share/lua/"..version.."/?.lua;"
-package.cpath = package.cpath..";"..
-  os.getenv("HOME").."/.luarocks/lib/lua/"..version.."/?.so;"
-
 local i3 = require"i3ipc"
 
 i3.main(function(conn)

@@ -8,7 +8,29 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
 
 
 ## Installation and running the script
-_TODO_
+
+1. Install the library
+- Archlinux:
+
+Install the `lua-i3ipc-git` package with any AUR helper, i.e.:
+```bash
+$ yay -S lua-i3ipc-git
+```
+
+2. Create a file, e.g. `myscript.lua` and import the library:
+```lua
+#!/usr/bin/env luajit
+local i3 = require"i3ipc"
+i3.main(function(ipc)
+  -- code
+end)
+```
+3. Make the script executable:
+```bash
+chmod u+x myscript.lua
+```
+
+4. Put the script invocation in your i3/Sway config, using `exec` command
 
 
 ## API
