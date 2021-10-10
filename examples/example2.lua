@@ -7,8 +7,10 @@ local i3 = require"i3ipc"
 
 i3.main(function(conn)
   conn:on(i3.EVENT.WINDOW, function(_, event)
-    if event.container.name:match("Alacritty") then
-      -- conn:command(("[con_id=%d] focus"):format(event.container.id))
+    if
+      event.container.app_id:match("Alacritty")
+      and event.change == "focus"
+    then
       conn:command("floating enable")
     end
   end)
