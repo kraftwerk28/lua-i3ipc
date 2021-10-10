@@ -1,6 +1,6 @@
 local struct = require("struct")
 local uv = require("luv")
-local json = require("json")
+local json = require("i3ipc.json")
 
 local Connection = {}
 Connection.__index = Connection
