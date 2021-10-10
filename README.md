@@ -1,4 +1,4 @@
-# i3ipc-lua
+# lua-i3ipc
 
 A Lua (LuaJIT) library for controlling [i3wm](https://i3wm.org/)
 and [Sway](https://swaywm.org/) through IPC.
