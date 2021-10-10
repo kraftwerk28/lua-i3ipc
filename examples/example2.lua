@@ -6,10 +6,10 @@ package.cpath = package.cpath..";"..
 local i3 = require"i3ipc"
 
 i3.main(function(conn)
-  conn:subscribe(i3.EVENT.WINDOW, function(conn, event)
+  conn:on(i3.EVENT.WINDOW, function(_, event)
     if event.container.name:match("Alacritty") then
-      -- conn:cmd(("[con_id=%d] focus"):format(event.container.id))
-      conn:cmd("floating enable")
+      -- conn:command(("[con_id=%d] focus"):format(event.container.id))
+      conn:command("floating enable")
     end
   end)
 end)

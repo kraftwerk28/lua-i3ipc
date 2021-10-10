@@ -5,28 +5,17 @@ package.cpath = package.cpath..";"..
   os.getenv("HOME").."/.luarocks/lib/lua/"..version.."/?.so;"
 
 local i3 = require"i3ipc"
-local CMD = i3.COMMAND
-local inspect = require"inspect"
 
 local prev_focused
+-- { con_id => { input_identifier => layout_index } }
 local windows = {}
-
-local function get_inputs(conn)
-  local r = {}
-  for _, input in ipairs(conn:send(CMD.GET_INPUTS)) do
-    if input.type == "keyboard" and input.xkb_active_layout_index then
-      table.insert(r, input)
-    end
-  end
-  return r
-end
 
 local function on_focus(conn, event)
   if event.change ~= "focus" then
     return
   end
   local con_id = event.container.id
-  local inputs = get_inputs(conn)
+  local inputs = conn:get_keyboard_inputs(conn)
   local input_layouting = {}
   for _, input in ipairs(inputs) do
     input_layouting[input.identifier] = input.xkb_active_layout_index
@@ -38,23 +27,53 @@ local function on_focus(conn, event)
   if cached_layouts ~= nil then
     for input_id, layout_index in pairs(cached_layouts) do
       if layout_index ~= input_layouting[input_id] then
-        local command =
+        conn:command(
           ([[input "%s" xkb_switch_layout %d]]):format(input_id, layout_index)
-        conn:cmd(command)
+        )
       end
     end
   else
     for _, input in ipairs(inputs) do
       if input.xkb_active_layout_index ~= 0 then
-        local command =
+        conn:command(
           ([[input "%s" xkb_switch_layout %d]]):format(input.identifier, 0)
-        conn:cmd(command)
+        )
       end
     end
   end
   prev_focused = con_id
 end
 
+local function on_close(conn, event)
+  if event.change ~= "close" then
+    return
+  end
+  windows[event.container.id] = nil
+end
+
+local function on_workspace_init(conn, event)
+  if event.change ~= "init" then
+    return
+  end
+  for _, input in ipairs(conn:get_keyboard_inputs(conn)) do
+    conn:command(([[input "%s" xkb_switch_layout %d]]):format(input.identifier, 0))
+  end
+end
+
 i3.main(function(conn)
-  conn:subscribe(i3.EVENT.WINDOW, on_focus)
+  function conn:get_keyboard_inputs()
+    local inputs, r = self:get_inputs(), {}
+    for _, input in ipairs(inputs) do
+      if input.type == "keyboard" and input.xkb_active_layout_index ~= nil then
+        table.insert(r, input)
+      end
+    end
+    return r
+  end
+
+  -- local inspect = require"inspect"
+  -- print(inspect(conn:get_outputs()))
+  conn:on(i3.EVENT.WINDOW, on_focus)
+  conn:on(i3.EVENT.WINDOW, on_close)
+  conn:on(i3.EVENT.WORKSPACE, on_workspace_init)
 end)
