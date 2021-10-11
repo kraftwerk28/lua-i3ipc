@@ -81,17 +81,54 @@ function Connection:send(type, payload)
   return response
 end
 
+local function resolve_event(event)
+  local event_id, event_name, event_change
+
+  if type(event) == "string" then
+    for _, v in pairs(EVENT) do
+      local id, name = unpack(v)
+      if name == event then
+        event_id, event_name = id, name
+        break
+      else
+        event_change = event:match("^"..name.."::(%w+)$")
+        if event_change ~= nil then
+          event_id, event_name = id, name
+          break
+        end
+      end
+    end
+  elseif type(event) == "table" and #event == 2 then
+    event_id, event_name = unpack(event)
+  else
+    error("Invalid event type")
+  end
+
+  return event_id, event_name, event_change
+end
+
 function Connection:on(event, callback)
-  local event_id, event_name = event[1], event[2]
-  local s = self.subscriptions
-  s[event_id] = s[event_id] or {}
-  s[event_id][callback] = true
+  local event_id, event_name, event_change = resolve_event(event)
+
+  local cb
+  if event_change ~= nil then
+    cb = function(...)
+      local change = select(2, ...).change
+      if change == event_change then callback(...) end
+    end
+  else
+    cb = callback
+  end
+
+  self.subscriptions[event_id] = self.subscriptions[event_id] or {}
+  self.subscriptions[event_id][cb] = true
+
   local raw = json.encode({event_name})
-  return self:send(2, raw)
+  return self:send(COMMAND.SUBSCRIBE, raw)
 end
 
 function Connection:off(event, callback)
-  local event_id = event[1]
+  local event_id = resolve_event(event)
   if (self.subscriptions[event_id] or {})[callback] then
     self.subscriptions[event_id][callback] = nil
     if not self:_has_subscriptions() and self.main_finished then
