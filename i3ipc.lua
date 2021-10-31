@@ -1,6 +1,6 @@
 local struct = require("struct")
 local uv = require("luv")
-local json = require("i3ipc.json")
+local json = require("cjson")
 
 local Connection = {}
 Connection.__index = Connection
@@ -163,18 +163,23 @@ function Connection:_get_sockpath()
 end
 
 function Connection:_process_message(type, raw_payload)
-  local payload = json.decode(raw_payload)
+  local ok, payload = pcall(json.decode, raw_payload)
+  if not ok then
+    return
+  end
   if bit.band(bit.rshift(type, 31), 1) == 1 then
     local event_id = bit.band(type, 0x7f)
-    if self.subscriptions[event_id] ~= nil then
+    local handlers = self.subscriptions[event_id]
+    if handlers ~= nil then
       coroutine.wrap(function()
-        for callback, _ in pairs(self.subscriptions[event_id]) do
+        for callback, _ in pairs(handlers) do
           callback(self, payload)
         end
       end)()
     end
   else
     local co = table.remove(self.send_awaiters, 1)
+    assert(type(co) == "thread")
     coroutine.resume(co, type, payload)
   end
 end
@@ -224,6 +229,8 @@ function Connection:_start_read()
 end
 
 function Connection:_stop()
+  self.pipe:read_stop()
+  print("Stopped reading the pipe")
   uv.stop()
 end
 
@@ -266,8 +273,9 @@ for method, cmd in pairs(COMMAND) do
 end
 
 local function main(fn)
+  local conn
   coroutine.wrap(function()
-    local conn = Connection:new()
+    conn = Connection:new()
     fn(conn)
     if conn:_has_subscriptions() then
       conn.main_finished = true
@@ -276,8 +284,10 @@ local function main(fn)
     end
   end)()
 
-  local function handle_signal()
-    uv.stop()
+  local function handle_signal(sig)
+    if conn then
+      conn:_stop()
+    end
   end
   for _, signal in ipairs{"sigint", "sigterm"} do
     local s = uv.new_signal()
