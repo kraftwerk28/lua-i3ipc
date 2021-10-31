@@ -162,13 +162,13 @@ function Connection:_get_sockpath()
   return sockpath
 end
 
-function Connection:_process_message(type, raw_payload)
+function Connection:_process_message(msg_type, raw_payload)
   local ok, payload = pcall(json.decode, raw_payload)
   if not ok then
     return
   end
-  if bit.band(bit.rshift(type, 31), 1) == 1 then
-    local event_id = bit.band(type, 0x7f)
+  if bit.band(bit.rshift(msg_type, 31), 1) == 1 then
+    local event_id = bit.band(msg_type, 0x7f)
     local handlers = self.subscriptions[event_id]
     if handlers ~= nil then
       coroutine.wrap(function()
@@ -180,7 +180,7 @@ function Connection:_process_message(type, raw_payload)
   else
     local co = table.remove(self.send_awaiters, 1)
     assert(type(co) == "thread")
-    coroutine.resume(co, type, payload)
+    coroutine.resume(co, msg_type, payload)
   end
 end
 
