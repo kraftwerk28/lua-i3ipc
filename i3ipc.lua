@@ -29,14 +29,16 @@ local COMMAND = {
 }
 
 local EVENT = {
-  WORKSPACE        = {0, "workspace"       }, -- Sent when the user switches to a different workspace, when a new workspace is initialized or when a workspace is removed (because the last client vanished).
-  OUTPUT           = {1, "output"          }, -- Sent when RandR issues a change notification (of either screens, outputs, CRTCs or output properties).
-  MODE             = {2, "mode"            }, -- Sent whenever i3 changes its binding mode.
-  WINDOW           = {3, "window"          }, -- Sent when a client’s window is successfully reparented (that is when i3 has finished fitting it into a container), when a window received input focus or when certain properties of the window have changed.
+  WORKSPACE        = {0, "workspace"}, -- Sent when the user switches to a different workspace, when a new workspace is initialized or when a workspace is removed (because the last client vanished).
+  OUTPUT           = {1, "output"}, -- Sent when RandR issues a change notification (of either screens, outputs, CRTCs or output properties).
+  MODE             = {2, "mode"}, -- Sent whenever i3 changes its binding mode.
+  WINDOW           = {3, "window"}, -- Sent when a client’s window is successfully reparented (that is when i3 has finished fitting it into a container), when a window received input focus or when certain properties of the window have changed.
   BARCONFIG_UPDATE = {4, "barconfig_update"}, -- Sent when the hidden_state or mode field in the barconfig of any bar instance was updated and when the config is reloaded.
-  BINDING          = {5, "binding"         }, -- Sent when a configured command binding is triggered with the keyboard or mouse
-  SHUTDOWN         = {6, "shutdown"        }, -- Sent when the ipc shuts down because of a restart or exit by user command
-  TICK             = {7, "tick"            },
+  BINDING          = {5, "binding"}, -- Sent when a configured command binding is triggered with the keyboard or mouse
+  SHUTDOWN         = {6, "shutdown"}, -- Sent when the ipc shuts down because of a restart or exit by user command
+  TICK             = {7, "tick"},
+  BAR_STATE_UPDATE = {20, "bar_state_update"},
+  INPUT            = {21, "input"},
 }
 
 local function parse_header(raw)
