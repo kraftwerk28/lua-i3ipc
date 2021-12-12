@@ -232,7 +232,6 @@ end
 
 function Connection:_stop()
   self.pipe:read_stop()
-  print("Stopped reading the pipe")
   uv.stop()
 end
 
