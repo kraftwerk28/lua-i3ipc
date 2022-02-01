@@ -1,12 +1,16 @@
+require("i3ipc.pkgpath")
 local struct = require("struct")
 local uv = require("luv")
 local json = require("cjson")
+local Reader = require("i3ipc.reader")
+local wrap_node = require("i3ipc.node-mt")
+local Cmd = require("i3ipc.cmd")
 
 local Connection = {}
 Connection.__index = Connection
 
 local MAGIC = "i3-ipc"
-local HEADER_SIZE = #MAGIC+8
+local HEADER_SIZE = #MAGIC + 8
 
 local COMMAND = {
   RUN_COMMAND       = 0,  -- Run the payload as an i3 command (like the commands you can bind to keys).
@@ -52,66 +56,112 @@ local function serialize(type, payload)
   return struct.pack("< c6 i4 i4", MAGIC, #payload, type)..payload
 end
 
-function Connection:new()
-  local pipe = uv.new_pipe(true)
-  local sockpath = self:_get_sockpath()
-  local co = coroutine.running()
-  pipe:connect(sockpath, function()
-    assert(coroutine.resume(co))
-  end)
-  local err = coroutine.yield()
-  if err ~= nil then
-    error("Failed to connect")
+function Connection:_get_sockpath()
+  local sockpath = os.getenv("SWAYSOCK") or os.getenv("I3SOCK")
+  if sockpath == nil then
+    error("Neither of SWAYSOCK nor I3SOCK environment variables are set")
   end
+  return sockpath
+end
+
+function Connection:new(opts)
+  local pipe = uv.new_pipe(true)
+  local ipc_reader = Reader:new(function(data)
+    if #data < HEADER_SIZE then
+      return nil
+    end
+    local --[[parsed]]_, msg_len, msg_type = parse_header(data:sub(1, HEADER_SIZE))
+    local raw_payload = data:sub(HEADER_SIZE + 1, HEADER_SIZE + msg_len)
+    if #raw_payload < msg_len then
+      return nil
+    end
+    local ok, payload = pcall(json.decode, raw_payload)
+    if not ok then
+      return nil
+    end
+    local message = { type = msg_type, payload = payload }
+    return message, data:sub(HEADER_SIZE + msg_len + 1)
+  end)
   local conn = setmetatable({
+    ipc_reader = ipc_reader,
+    cmd_result_reader = Reader:new(),
     pipe = pipe,
     subscriptions = {},
-    coro = co,
-    send_awaiters = {},
     main_finished = false,
   }, self)
-  conn:_start_read()
+  if opts.cmd == true then
+    conn.cmd = Cmd:new()
+  end
+  coroutine.wrap(function()
+    while true do
+      local msg = conn.ipc_reader:recv()
+      if bit.band(bit.rshift(msg.type, 31), 1) == 1 then
+        local event_id = bit.band(msg.type, 0x7f)
+        for handler in pairs(conn.subscriptions[event_id] or {}) do
+          coroutine.wrap(function()
+            handler(conn, msg.payload)
+          end)()
+        end
+      else
+        conn.cmd_result_reader:push(msg.payload)
+      end
+    end
+  end)()
+
   return conn
+end
+
+function Connection:connect_socket(sockpath)
+  sockpath = sockpath or self:_get_sockpath()
+  local co = coroutine.running()
+  self.pipe:connect(sockpath, function()
+    assert(coroutine.resume(co))
+  end)
+  coroutine.yield()
+  self.pipe:read_start(function(err, chunk)
+    if err ~= nil or chunk == nil then
+      return
+    end
+    self.ipc_reader:push(chunk)
+  end)
+  if self.cmd then
+    self.cmd:listen_socket()
+  end
 end
 
 function Connection:send(type, payload)
   local event_id = type
   local msg = serialize(event_id, payload)
-  table.insert(self.send_awaiters, coroutine.running())
   self.pipe:write(msg)
-  local _, response = coroutine.yield()
-  return response
+  return self.cmd_result_reader:recv()
 end
 
 local function resolve_event(event)
   local event_id, event_name, event_change
-
   if type(event) == "string" then
+    -- i.e. "workspace"
     for _, v in pairs(EVENT) do
       local id, name = unpack(v)
       if name == event then
-        event_id, event_name = id, name
-        break
+        return id, name, nil
       else
         event_change = event:match("^"..name.."::(%w+)$")
         if event_change ~= nil then
-          event_id, event_name = id, name
-          break
+          return id, name, event_change
         end
       end
     end
   elseif type(event) == "table" and #event == 2 then
+    -- i.e. EVENT.WORKSPACE
     event_id, event_name = unpack(event)
+    return event_id, event_name, nil
   else
     error("Invalid event type")
   end
-
-  return event_id, event_name, event_change
 end
 
 function Connection:on(event, callback)
   local event_id, event_name, event_change = resolve_event(event)
-
   local cb
   if event_change ~= nil then
     cb = function(...)
@@ -141,13 +191,6 @@ function Connection:off(event, callback)
   return false
 end
 
-function Connection:_has_subscriptions()
-  for _, callbacks in pairs(self.subscriptions) do
-    if next(callbacks) ~= nil then return true end
-  end
-  return false
-end
-
 function Connection:once(event, callback)
   local function handler(...)
     callback(...)
@@ -156,78 +199,11 @@ function Connection:once(event, callback)
   self:on(event, handler)
 end
 
-function Connection:_get_sockpath()
-  local sockpath = os.getenv("SWAYSOCK") or os.getenv("I3SOCK")
-  if sockpath == nil then
-    error("Neither of SWAYSOCK nor I3SOCK environment variables are defined")
+function Connection:_has_subscriptions()
+  for _, callbacks in pairs(self.subscriptions) do
+    if next(callbacks) ~= nil then return true end
   end
-  return sockpath
-end
-
-function Connection:_process_message(msg_type, raw_payload)
-  local ok, payload = pcall(json.decode, raw_payload)
-  if not ok then
-    return
-  end
-  if bit.band(bit.rshift(msg_type, 31), 1) == 1 then
-    local event_id = bit.band(msg_type, 0x7f)
-    local handlers = self.subscriptions[event_id]
-    if handlers ~= nil then
-      coroutine.wrap(function()
-        for callback, _ in pairs(handlers) do
-          callback(self, payload)
-        end
-      end)()
-    end
-  else
-    local co = table.remove(self.send_awaiters, 1)
-    assert(type(co) == "thread")
-    coroutine.resume(co, msg_type, payload)
-  end
-end
-
-function Connection:_process_chunk(chunk)
-  local partial = self.read_partial
-  if partial ~= nil then
-    local needed_bytes_count = partial.len - #partial.payload
-    if needed_bytes_count > #chunk then
-      partial.payload = partial.payload .. chunk
-    else
-      self:_process_message(
-        partial.type,
-        partial.payload .. chunk:sub(1, needed_bytes_count)
-      )
-      self.read_partial = nil
-      if #chunk > needed_bytes_count then
-        self:_process_chunk(chunk:sub(needed_bytes_count+1))
-      end
-    end
-    return
-  end
-
-  local parsed, msg_len, msg_type = parse_header(chunk:sub(1, HEADER_SIZE))
-  assert(parsed, "Failed to parse the message")
-  local raw_payload = chunk:sub(HEADER_SIZE+1)
-  local actual_len = #raw_payload
-
-  if actual_len < msg_len then
-    -- Not enough payload, need more chunks
-    self.read_partial = {type = msg_type, len = msg_len, payload = raw_payload}
-  elseif actual_len == msg_len then
-    self:_process_message(msg_type, raw_payload)
-  else -- actual_len > msg_len
-    self:_process_message(msg_type, raw_payload:sub(1, msg_len))
-    self:_process_chunk(raw_payload:sub(msg_len + 1))
-  end
-end
-
-function Connection:_start_read()
-  self.pipe:read_start(function(err, chunk)
-    if err ~= nil or chunk == nil then
-      return
-    end
-    self:_process_chunk(chunk)
-  end)
+  return false
 end
 
 function Connection:_stop()
@@ -241,61 +217,42 @@ end
 
 function Connection:get_tree()
   local tree = self:send(COMMAND.GET_TREE)
-  local tree_mt = {}
-
-  function tree_mt:find_con(predicate)
-    local queue = {self}
-    while #queue > 0 do
-      local cur = table.remove(queue, 1)
-      if predicate(cur) then
-        return cur
-      end
-      for _, con in ipairs(cur.nodes or {}) do
-        table.insert(queue, con)
-      end
-      for _, con in ipairs(cur.floating_nodes or {}) do
-        table.insert(queue, con)
-      end
-    end
-  end
-
-  function tree_mt:find_focused()
-    return self:find_con(function(con) return con.focused end)
-  end
-
-  return setmetatable(tree, {__index = tree_mt})
+  return wrap_node(tree)
 end
 
 -- Generate get_* methods for Connection
 for method, cmd in pairs(COMMAND) do
   if method:match("^GET_") and method ~= "GET_TREE" then
-    Connection[method:lower()] = function(ipc) return ipc:send(cmd) end
+    Connection[method:lower()] = function(ipc)
+      return ipc:send(cmd)
+    end
   end
 end
 
-local function main(fn)
-  local conn
+function Connection:main(fn)
   coroutine.wrap(function()
-    conn = Connection:new()
-    fn(conn)
-    if conn:_has_subscriptions() then
-      conn.main_finished = true
+    self:connect_socket()
+    fn(self)
+    if self:_has_subscriptions() then
+      self.main_finished = true
     else
-      conn:_stop()
+      self:_stop()
     end
   end)()
-
-  local function handle_signal(sig)
-    if conn then
-      conn:_stop()
-    end
+  local function handle_signal(signal)
+    print("Received signal "..signal)
+    self:_stop()
   end
-  for _, signal in ipairs{"sigint", "sigterm"} do
+  for _, signal in ipairs {"sigint", "sigterm"} do
     local s = uv.new_signal()
     s:start(signal, handle_signal)
   end
-
   uv.run()
+end
+
+local function main(fn)
+  local conn = Connection:new()
+  conn:main(fn)
 end
 
 return {
@@ -303,4 +260,6 @@ return {
   main = main,
   COMMAND = COMMAND,
   EVENT = EVENT,
+  wrap_node = wrap_node,
+  Cmd = Cmd,
 }

@@ -1,0 +1,5 @@
+#!/bin/bash
+if [[ -z $SOCKPATH ]]; then
+	SOCKPATH="${XDG_RUNTIME_DIR:-"/tmp"}/lua-i3ipc.sock"
+fi
+echo "$@" | exec socat - "unix-connect:${SOCKPATH}"
