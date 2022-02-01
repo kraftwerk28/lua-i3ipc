@@ -1,31 +1,31 @@
 local uv = require("luv")
 local Reader = require("i3ipc.reader")
 
-local ExtCmd = {}
-ExtCmd.__index = ExtCmd
+local Cmd = {}
+Cmd.__index = Cmd
 
-function ExtCmd:new()
+function Cmd:new()
   local pipe = uv.new_pipe()
   local extcmd = setmetatable({
     pipe = pipe,
-    line_reader = Reader:new(function(data)
-      local idx = data:find("\n")
-      if not idx then
-        return data
-      else
-        return data:sub(1, idx - 1), data:sub(idx + 1)
+    line_reader = Reader:new(function(data, is_eof)
+      if not is_eof then
+        return nil
       end
+      return data
     end),
     subscriptions = {},
   }, self)
   coroutine.wrap(function()
     while true do
-      local line = extcmd.line_reader:recv()
-      local cmd, rest = line:match("^%s*(%S+)(.*)")
-      rest = rest:gsub("^%s+", ""):gsub("%s+$", "")
+      local args = {}
+      for line in extcmd.line_reader:recv():gmatch("[^\n]+") do
+        table.insert(args, line)
+      end
+      local cmd = table.remove(args, 1)
       for handler in pairs(extcmd.subscriptions[cmd] or {}) do
         coroutine.wrap(function()
-          handler(self, rest)
+          handler(self, unpack(args))
         end)()
       end
     end
@@ -33,7 +33,7 @@ function ExtCmd:new()
   return extcmd
 end
 
-function ExtCmd:listen_socket(sockpath)
+function Cmd:listen_socket(sockpath)
   if not sockpath then
     sockpath = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/lua-i3ipc.sock"
   end
@@ -49,6 +49,7 @@ function ExtCmd:listen_socket(sockpath)
       if data then
         self.line_reader:push(data)
       else
+        self.line_reader:push(nil, true)
         client_pipe:shutdown()
         client_pipe:close()
       end
@@ -59,9 +60,9 @@ function ExtCmd:listen_socket(sockpath)
   end
 end
 
-function ExtCmd:on(command, callback)
+function Cmd:on(command, callback)
   self.subscriptions[command] = self.subscriptions[command] or {}
   self.subscriptions[command][callback] = true
 end
 
-return ExtCmd
+return Cmd

@@ -15,13 +15,13 @@ function Reader:new(parse_fn)
   }, self)
 end
 
-function Reader:push(data)
+function Reader:push(data, ...)
   if self.partial ~= nil then
-    data = self.partial .. data
+    data = self.partial .. (data or "")
     self.partial = nil
   end
   repeat
-    local msg, rest = self.parse(data)
+    local msg, rest = self.parse(data, ...)
     if msg == nil then
       self.partial = data
       break
