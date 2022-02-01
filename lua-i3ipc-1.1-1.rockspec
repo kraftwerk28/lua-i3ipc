@@ -18,6 +18,6 @@ dependencies = {
 build = {
    type = "builtin",
    modules = {
-      ["i3ipc"] = "i3ipc.lua",
+      ["i3ipc"] = "i3ipc/init.lua",
    },
 }
