@@ -65,6 +65,7 @@ function Connection:_get_sockpath()
 end
 
 function Connection:new(opts)
+  opts = opts or {}
   local pipe = uv.new_pipe(true)
   local ipc_reader = Reader:new(function(data)
     if #data < HEADER_SIZE then
