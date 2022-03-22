@@ -1,6 +1,6 @@
 # lua-i3ipc
 
-A Lua (LuaJIT) library for controlling [i3wm](https://i3wm.org/)
+A Lua (LuaJIT) framework for controlling [i3wm](https://i3wm.org/)
 and [Sway](https://swaywm.org/) through IPC.
 Uses [libuv](https://github.com/luvit/luv) bindings for I/O.
 
@@ -9,28 +9,29 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
 
 ## Installation and running the script
 
-1. Install the library
-- Archlinux:
+1.  Install the library
 
-Install the `lua-i3ipc-git` package with any AUR helper, i.e.:
-```bash
-$ yay -S lua-i3ipc-git
-```
+    <details>
+        <summary>Arch Linux</summary>
+        Install the `lua-i3ipc-git` package with any AUR helper, i.e.:
+        `$ yay -S lua-i3ipc-git`.
+    </details>
 
-2. Create a file, e.g. `myscript.lua` and import the library:
-```lua
-#!/usr/bin/env luajit
-local i3 = require"i3ipc"
-i3.main(function(ipc)
-  -- code
-end)
-```
-3. Make the script executable:
-```bash
-chmod u+x myscript.lua
-```
+1.  Create a file, e.g. `myscript.lua` and import the library:
+    ```lua
+    #!/usr/bin/env luajit
+    local i3 = require"i3ipc"
+    i3.main(function(ipc)
+     -- code
+    end)
+    ```
 
-4. Put the script invocation in your i3/Sway config, using `exec` command
+1.  Make the script executable:
+    ```bash
+    chmod u+x myscript.lua
+    ```
+
+1. Put the script invocation in your i3/Sway config, using `exec` command
 
 
 ## API
@@ -154,6 +155,12 @@ Bound methods for `Connection` in lowercase that correspond to `GET_*`
 commands in the [spec (Table #1)](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3).
 
 
+### `Cmd`
+
+A class for receiving commands from anyone through UNIX socket.
+
+TBD...
+
 ## Example
 
 ```lua
@@ -167,5 +174,33 @@ i3.main(function(conn)
   end)
 end)
 ```
+
+```lua
+local i3 = require("i3ipc")
+local ipc = Connection:new { cmd = true }
+ipc:main(function())
+  local focus_now, focus_prev
+  do
+    local focused_con = ipc:get_tree():find_focused()
+    if focused_con then
+      focus_now = focused_con.id
+    end
+  end
+  ipc.cmd:on("focus_prev", function()
+    if not focus_prev then return end
+    ipc:command(("[con_id=%d] focus"):format(focus_prev))
+  end)
+  ipc:on("window::focus", function(ipc, event)
+    focus_prev = focus_now
+    focus_now = event.container.id
+  end)
+end)
+```
+
+...and then, in your `bindsym`:
+```bash
+$ i3ipc-cmd focus_prev
+```
+
 
 Also check out [examples](./examples) for more useful snippets.

@@ -12,6 +12,7 @@ Connection.__index = Connection
 local MAGIC = "i3-ipc"
 local HEADER_SIZE = #MAGIC + 8
 
+-- luacheck: push no max line length
 local COMMAND = {
   RUN_COMMAND       = 0,  -- Run the payload as an i3 command (like the commands you can bind to keys).
   GET_WORKSPACES    = 1,  -- Get the list of current workspaces.
@@ -26,10 +27,9 @@ local COMMAND = {
   SEND_TICK         = 10, -- Sends a tick event with the specified payload.
   SYNC              = 11, -- Sends an i3 sync event with the specified random value to the specified window.
   GET_BINDING_STATE = 12, -- Request the current binding state, i.e. the currently active binding mode name.
-
   -- Sway-only
   GET_INPUTS        = 100,
-  GET_SEATS         = 100,
+  GET_SEATS         = 101,
 }
 
 local EVENT = {
@@ -44,6 +44,15 @@ local EVENT = {
   BAR_STATE_UPDATE = {20, "bar_state_update"},
   INPUT            = {21, "input"},
 }
+-- luacheck: pop
+
+local function is_builtin_event(e)
+  if type(e) ~= "table" or #e ~= 2 then return false end
+  for _, v in pairs(EVENT) do
+    if v[1] == e[1] and v[2] == e[2] then return true end
+  end
+  return false
+end
 
 local function parse_header(raw)
   local magic, len, type = struct.unpack("< c6 i4 i4", raw)
@@ -56,7 +65,7 @@ local function serialize(type, payload)
   return struct.pack("< c6 i4 i4", MAGIC, #payload, type)..payload
 end
 
-function Connection:_get_sockpath()
+function Connection._get_sockpath()
   local sockpath = os.getenv("SWAYSOCK") or os.getenv("I3SOCK")
   if sockpath == nil then
     error("Neither of SWAYSOCK nor I3SOCK environment variables are set")
@@ -67,6 +76,7 @@ end
 function Connection:new(opts)
   opts = opts or {}
   local pipe = uv.new_pipe(true)
+
   local ipc_reader = Reader:new(function(data)
     if #data < HEADER_SIZE then
       return nil
@@ -83,13 +93,16 @@ function Connection:new(opts)
     local message = { type = msg_type, payload = payload }
     return message, data:sub(HEADER_SIZE + msg_len + 1)
   end)
+
   local conn = setmetatable({
     ipc_reader = ipc_reader,
     cmd_result_reader = Reader:new(),
     pipe = pipe,
-    subscriptions = {},
+    handlers = {},
+    subscribed_to = {},
     main_finished = false,
   }, self)
+
   if opts.cmd == true then
     conn.cmd = Cmd:new()
   end
@@ -98,10 +111,13 @@ function Connection:new(opts)
       local msg = conn.ipc_reader:recv()
       if bit.band(bit.rshift(msg.type, 31), 1) == 1 then
         local event_id = bit.band(msg.type, 0x7f)
-        for handler in pairs(conn.subscriptions[event_id] or {}) do
-          coroutine.wrap(function()
-            handler(conn, msg.payload)
-          end)()
+        local handlers = conn.handlers[event_id] or {}
+        for _, handler in pairs(handlers) do
+          if msg.payload.change == handler.change then
+            coroutine.wrap(function()
+              handler.callback(conn, msg.payload)
+            end)()
+          end
         end
       else
         conn.cmd_result_reader:push(msg.payload)
@@ -138,71 +154,89 @@ function Connection:send(type, payload)
 end
 
 local function resolve_event(event)
-  local event_id, event_name, event_change
-  if type(event) == "string" then
-    -- i.e. "workspace"
+  if is_builtin_event(event) then
+    -- i.e. EVENT.WINDOW
+    return {{ id = event[1], name = event[2] }}
+  elseif type(event) == "string" then
+    -- i.e. "window::new" or just "window"
+    local name, change = event:match("(%w+)::(%w+)")
+    if name == nil then name = event end
     for _, v in pairs(EVENT) do
-      local id, name = unpack(v)
-      if name == event then
-        return id, name, nil
-      else
-        event_change = event:match("^"..name.."::(%w+)$")
-        if event_change ~= nil then
-          return id, name, event_change
-        end
+      if v[2] == name then
+        return {{ id = v[1], name = v[2], change = change }}
       end
     end
-  elseif type(event) == "table" and #event == 2 then
-    -- i.e. EVENT.WORKSPACE
-    event_id, event_name = unpack(event)
-    return event_id, event_name, nil
+  elseif type(event) == "table" then
+    -- i.e. { EVENT.WINDOW, "workspace::focus" }
+    local result = {}
+    for _, v in ipairs(event) do
+      local resolved = resolve_event(v)
+      for _, r in ipairs(resolved) do
+        table.insert(result, r)
+      end
+    end
+    return result
   else
     error("Invalid event type")
   end
 end
 
 function Connection:on(event, callback)
-  local event_id, event_name, event_change = resolve_event(event)
-  local cb
-  if event_change ~= nil then
-    cb = function(...)
-      local change = select(2, ...).change
-      if change == event_change then callback(...) end
+  local evd = resolve_event(event)
+  local replies = {}
+  for _, e in ipairs(evd) do
+    e.callback = callback
+    self.handlers[e.id] = self.handlers[e.id] or {}
+    table.insert(self.handlers[e.id], e)
+    if not self.subscribed_to[e.name] then
+      local raw = json.encode({ e.name })
+      local reply = self:send(COMMAND.SUBSCRIBE, raw)
+      table.insert(replies, reply)
+      self.subscribed_to[e.name] = true
     end
-  else
-    cb = callback
   end
-
-  self.subscriptions[event_id] = self.subscriptions[event_id] or {}
-  self.subscriptions[event_id][cb] = true
-
-  local raw = json.encode({event_name})
-  return self:send(COMMAND.SUBSCRIBE, raw)
+  return replies
 end
 
 function Connection:off(event, callback)
-  local event_id = resolve_event(event)
-  if (self.subscriptions[event_id] or {})[callback] then
-    self.subscriptions[event_id][callback] = nil
-    if not self:_has_subscriptions() and self.main_finished then
-      self:_stop()
+  local evd = resolve_event(event)
+  local nremoved = 0
+  for _, e in ipairs(evd) do
+    local new_handlers = {}
+    for _, h in ipairs(self.handlers[e.id]) do
+      if
+        (callback ~= nil and e.callback ~= callback)
+        and (e.change ~= nil and e.change ~= h.change)
+      then
+        table.insert(new_handlers, h)
+      end
     end
-    return true
+    if #new_handlers > 0 then
+      nremoved = nremoved + (#self.handlers[e.id] - #new_handlers)
+      self.handlers[e.id] = new_handlers
+    else
+      nremoved = nremoved + #self.handlers[e.id]
+      self.handlers[e.id] = nil
+    end
   end
-  return false
+  if not self:_has_subscriptions() and self.main_finished then
+    self:_stop()
+  end
+  return nremoved
 end
 
 function Connection:once(event, callback)
   local function handler(...)
     callback(...)
-    assert(self:off(event, handler))
+    local nremoved = self:off(event, handler)
+    assert(nremoved > 0)
   end
   self:on(event, handler)
 end
 
 function Connection:_has_subscriptions()
-  for _, callbacks in pairs(self.subscriptions) do
-    if next(callbacks) ~= nil then return true end
+  for _, h in pairs(self.handlers) do
+    if #h > 0 then return true end
   end
   return false
 end
