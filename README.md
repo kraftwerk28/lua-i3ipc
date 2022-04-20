@@ -1,8 +1,8 @@
 # lua-i3ipc
 
-A Lua (LuaJIT) framework for controlling [i3wm](https://i3wm.org/)
-and [Sway](https://swaywm.org/) through IPC.
-Uses [libuv](https://github.com/luvit/luv) bindings for I/O.
+A Lua (LuaJIT) framework for controlling [i3wm](https://i3wm.org/) and
+[Sway](https://swaywm.org/) through IPC. Uses
+[libuv](https://github.com/luvit/luv) bindings for I/O.
 
 Currently supports Lua 5.1 (LuaJIT 2.0.5)
 
@@ -168,7 +168,7 @@ local i3 = require"i3ipc"
 local EVENT, COMMAND = i3.EVENT, i3.COMMAND
 
 i3.main(function(conn)
-  conn:once(EVENT.WORKSPACE, function(event)
+  conn:once("workspace", function(event)
     local cmd = "exec notify-send 'switched to workspace %d'"
     conn:command(cmd:format(event.current.name))
   end)

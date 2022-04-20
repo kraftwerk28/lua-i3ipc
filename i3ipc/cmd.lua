@@ -1,68 +1,44 @@
-local uv = require("luv")
-local Reader = require("i3ipc.reader")
+local p = require("i3ipc.protocol")
 
 local Cmd = {}
 Cmd.__index = Cmd
 
-function Cmd:new()
-  local pipe = uv.new_pipe()
-  local extcmd = setmetatable({
-    pipe = pipe,
-    line_reader = Reader:new(function(data, is_eof)
-      if not is_eof then
-        return nil
-      end
-      return data
-    end),
-    subscriptions = {},
+function Cmd:new(conn)
+  local c = setmetatable({
+    conn = conn,
+    -- { [command] = { handler1, handler2, ... } }
+    handlers = {},
   }, self)
-  coroutine.wrap(function()
-    while true do
-      local args = {}
-      for line in extcmd.line_reader:recv():gmatch("[^\n]+") do
-        table.insert(args, line)
-      end
-      local cmd = table.remove(args, 1)
-      for handler in pairs(extcmd.subscriptions[cmd] or {}) do
-        coroutine.wrap(function()
-          handler(self, unpack(args))
-        end)()
-      end
-    end
-  end)()
-  return extcmd
+  return c
 end
 
-function Cmd:listen_socket(sockpath)
-  if not sockpath then
-    sockpath = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/lua-i3ipc.sock"
-  end
-  uv.fs_unlink(sockpath)
-  self.pipe:bind(sockpath)
-  local status, err = self.pipe:listen(64, function(err)
-    local client_pipe = uv.new_pipe()
-    self.pipe:accept(client_pipe)
-    client_pipe:read_start(function(err, data)
-      if err ~= nil then
-        print(err)
+function Cmd:setup()
+  self.conn:on(p.EVENT.BINDING, function(event)
+    local words = {}
+    for word in event.binding.command:gmatch("[^%s]+") do
+      table.insert(words, word)
+    end
+    if words[1] ~= "nop" then return end
+    table.remove(words, 1)
+    if self.prefix ~= nil then
+      if words[1] ~= self.prefix then
+        return
       end
-      if data then
-        self.line_reader:push(data)
-      else
-        self.line_reader:push(nil, true)
-        client_pipe:shutdown()
-        client_pipe:close()
-      end
-    end)
+      table.remove(words, 1)
+    end
+    if #words == 0 then return end
+    local cmd = table.remove(words, 1)
+    for h, _ in pairs(self.handlers[cmd] or {}) do h(words) end
   end)
-  if status ~= 0 then
-    print("listen error", err)
-  end
+end
+
+function Cmd:set_prefix(prefix)
+  self.prefix = prefix
 end
 
 function Cmd:on(command, callback)
-  self.subscriptions[command] = self.subscriptions[command] or {}
-  self.subscriptions[command][callback] = true
+  self.handlers[command] = self.handlers[command] or {}
+  self.handlers[command][callback] = true
 end
 
 return Cmd

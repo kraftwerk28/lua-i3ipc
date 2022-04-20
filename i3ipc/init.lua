@@ -2,53 +2,18 @@ require("i3ipc.pkgpath")
 local struct = require("struct")
 local uv = require("luv")
 local json = require("cjson")
+
 local Reader = require("i3ipc.reader")
 local wrap_node = require("i3ipc.node-mt")
 local Cmd = require("i3ipc.cmd")
+local p = require("i3ipc.protocol")
 
 local Connection = {}
 Connection.__index = Connection
 
-local MAGIC = "i3-ipc"
-local HEADER_SIZE = #MAGIC + 8
-
--- luacheck: push no max line length
-local COMMAND = {
-  RUN_COMMAND       = 0,  -- Run the payload as an i3 command (like the commands you can bind to keys).
-  GET_WORKSPACES    = 1,  -- Get the list of current workspaces.
-  SUBSCRIBE         = 2,  -- Subscribe this IPC connection to the event types specified in the message payload. See [events].
-  GET_OUTPUTS       = 3,  -- Get the list of current outputs.
-  GET_TREE          = 4,  -- Get the i3 layout tree.
-  GET_MARKS         = 5,  -- Gets the names of all currently set marks.
-  GET_BAR_CONFIG    = 6,  -- Gets the specified bar configuration or the names of all bar configurations if payload is empty.
-  GET_VERSION       = 7,  -- Gets the i3 version.
-  GET_BINDING_MODES = 8,  -- Gets the names of all currently configured binding modes.
-  GET_CONFIG        = 9,  -- Returns the last loaded i3 config.
-  SEND_TICK         = 10, -- Sends a tick event with the specified payload.
-  SYNC              = 11, -- Sends an i3 sync event with the specified random value to the specified window.
-  GET_BINDING_STATE = 12, -- Request the current binding state, i.e. the currently active binding mode name.
-  -- Sway-only
-  GET_INPUTS        = 100,
-  GET_SEATS         = 101,
-}
-
-local EVENT = {
-  WORKSPACE        = {0, "workspace"}, -- Sent when the user switches to a different workspace, when a new workspace is initialized or when a workspace is removed (because the last client vanished).
-  OUTPUT           = {1, "output"}, -- Sent when RandR issues a change notification (of either screens, outputs, CRTCs or output properties).
-  MODE             = {2, "mode"}, -- Sent whenever i3 changes its binding mode.
-  WINDOW           = {3, "window"}, -- Sent when a client’s window is successfully reparented (that is when i3 has finished fitting it into a container), when a window received input focus or when certain properties of the window have changed.
-  BARCONFIG_UPDATE = {4, "barconfig_update"}, -- Sent when the hidden_state or mode field in the barconfig of any bar instance was updated and when the config is reloaded.
-  BINDING          = {5, "binding"}, -- Sent when a configured command binding is triggered with the keyboard or mouse
-  SHUTDOWN         = {6, "shutdown"}, -- Sent when the ipc shuts down because of a restart or exit by user command
-  TICK             = {7, "tick"},
-  BAR_STATE_UPDATE = {20, "bar_state_update"},
-  INPUT            = {21, "input"},
-}
--- luacheck: pop
-
 local function is_builtin_event(e)
   if type(e) ~= "table" or #e ~= 2 then return false end
-  for _, v in pairs(EVENT) do
+  for _, v in pairs(p.EVENT) do
     if v[1] == e[1] and v[2] == e[2] then return true end
   end
   return false
@@ -56,13 +21,13 @@ end
 
 local function parse_header(raw)
   local magic, len, type = struct.unpack("< c6 i4 i4", raw)
-  if magic ~= MAGIC then return false end
+  if magic ~= p.MAGIC then return false end
   return true, len, type
 end
 
 local function serialize(type, payload)
   payload = payload or ""
-  return struct.pack("< c6 i4 i4", MAGIC, #payload, type)..payload
+  return struct.pack("< c6 i4 i4", p.MAGIC, #payload, type)..payload
 end
 
 function Connection._get_sockpath()
@@ -78,11 +43,11 @@ function Connection:new(opts)
   local pipe = uv.new_pipe(true)
 
   local ipc_reader = Reader:new(function(data)
-    if #data < HEADER_SIZE then
+    if #data < p.HEADER_SIZE then
       return nil
     end
-    local --[[parsed]]_, msg_len, msg_type = parse_header(data:sub(1, HEADER_SIZE))
-    local raw_payload = data:sub(HEADER_SIZE + 1, HEADER_SIZE + msg_len)
+    local _, msg_len, msg_type = parse_header(data:sub(1, p.HEADER_SIZE))
+    local raw_payload = data:sub(p.HEADER_SIZE + 1, p.HEADER_SIZE + msg_len)
     if #raw_payload < msg_len then
       return nil
     end
@@ -91,7 +56,7 @@ function Connection:new(opts)
       return nil
     end
     local message = { type = msg_type, payload = payload }
-    return message, data:sub(HEADER_SIZE + msg_len + 1)
+    return message, data:sub(p.HEADER_SIZE + msg_len + 1)
   end)
 
   local conn = setmetatable({
@@ -103,9 +68,8 @@ function Connection:new(opts)
     main_finished = false,
   }, self)
 
-  if opts.cmd == true then
-    conn.cmd = Cmd:new()
-  end
+  conn.cmd = Cmd:new(conn)
+
   coroutine.wrap(function()
     while true do
       local msg = conn.ipc_reader:recv()
@@ -113,9 +77,9 @@ function Connection:new(opts)
         local event_id = bit.band(msg.type, 0x7f)
         local handlers = conn.handlers[event_id] or {}
         for _, handler in pairs(handlers) do
-          if msg.payload.change == handler.change then
+          if handler.change == nil or msg.payload.change == handler.change then
             coroutine.wrap(function()
-              handler.callback(conn, msg.payload)
+              handler.callback(msg.payload)
             end)()
           end
         end
@@ -141,9 +105,7 @@ function Connection:connect_socket(sockpath)
     end
     self.ipc_reader:push(chunk)
   end)
-  if self.cmd then
-    self.cmd:listen_socket()
-  end
+  self.cmd:setup()
 end
 
 function Connection:send(type, payload)
@@ -161,7 +123,7 @@ local function resolve_event(event)
     -- i.e. "window::new" or just "window"
     local name, change = event:match("(%w+)::(%w+)")
     if name == nil then name = event end
-    for _, v in pairs(EVENT) do
+    for _, v in pairs(p.EVENT) do
       if v[2] == name then
         return {{ id = v[1], name = v[2], change = change }}
       end
@@ -190,7 +152,7 @@ function Connection:on(event, callback)
     table.insert(self.handlers[e.id], e)
     if not self.subscribed_to[e.name] then
       local raw = json.encode({ e.name })
-      local reply = self:send(COMMAND.SUBSCRIBE, raw)
+      local reply = self:send(p.COMMAND.SUBSCRIBE, raw)
       table.insert(replies, reply)
       self.subscribed_to[e.name] = true
     end
@@ -247,16 +209,16 @@ function Connection:_stop()
 end
 
 function Connection:command(command)
-  return self:send(COMMAND.RUN_COMMAND, command)
+  return self:send(p.COMMAND.RUN_COMMAND, command)
 end
 
 function Connection:get_tree()
-  local tree = self:send(COMMAND.GET_TREE)
+  local tree = self:send(p.COMMAND.GET_TREE)
   return wrap_node(tree)
 end
 
 -- Generate get_* methods for Connection
-for method, cmd in pairs(COMMAND) do
+for method, cmd in pairs(p.COMMAND) do
   if method:match("^GET_") and method ~= "GET_TREE" then
     Connection[method:lower()] = function(ipc)
       return ipc:send(cmd)
@@ -293,8 +255,8 @@ end
 return {
   Connection = Connection,
   main = main,
-  COMMAND = COMMAND,
-  EVENT = EVENT,
+  COMMAND = p.COMMAND,
+  EVENT = p.EVENT,
   wrap_node = wrap_node,
   Cmd = Cmd,
 }
