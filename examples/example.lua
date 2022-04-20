@@ -7,9 +7,9 @@ ipc:main(function()
   ipc:on("window", function(event)
     print(event.change)
   end)
-  ipc.cmd:on("focus_prev", function(args)
-    for _, arg in ipairs(args) do
-      print(arg)
+  ipc.cmd:on("tab", function(args)
+    for i, arg in ipairs(args) do
+      print(i.."arg "..arg)
     end
   end)
 end)

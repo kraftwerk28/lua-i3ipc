@@ -28,7 +28,7 @@ function Cmd:setup()
     end
     if #words == 0 then return end
     local cmd = table.remove(words, 1)
-    for h, _ in pairs(self.handlers[cmd] or {}) do h(words) end
+    for h, _ in pairs(self.handlers[cmd] or {}) do h(unpack(words)) end
   end)
 end
 
