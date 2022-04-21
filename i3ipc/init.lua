@@ -38,8 +38,7 @@ function Connection._get_sockpath()
   return sockpath
 end
 
-function Connection:new(opts)
-  opts = opts or {}
+function Connection:new()
   local pipe = uv.new_pipe(true)
 
   local ipc_reader = Reader:new(function(data)

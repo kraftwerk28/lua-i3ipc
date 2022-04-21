@@ -7,6 +7,15 @@ A Lua (LuaJIT) framework for controlling [i3wm](https://i3wm.org/) and
 Currently supports Lua 5.1 (LuaJIT 2.0.5)
 
 
+## Table of contents
+
+- #### [Installation](#installation-and-running-the-script)
+- #### [API](#api)
+  - [Connection](#class-connection)
+  - [Tree](#class-tree)
+  - [Cmd](#class-cmd)
+
+
 ## Installation and running the script
 
 1.  Install the library
@@ -17,21 +26,21 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
         `$ yay -S lua-i3ipc-git`.
     </details>
 
-1.  Create a file, e.g. `myscript.lua` and import the library:
+2.  Create a file, i.e. `myscript.lua` and import the library:
     ```lua
     #!/usr/bin/env luajit
-    local i3 = require"i3ipc"
+    local i3 = require("i3ipc")
     i3.main(function(ipc)
-     -- code
+      -- code
     end)
     ```
 
-1.  Make the script executable:
+3.  Make the script executable:
     ```bash
-    chmod u+x myscript.lua
+    $ chmod u+x myscript.lua
     ```
 
-1. Put the script invocation in your i3/Sway config, using `exec` command
+4. Put the script invocation in your i3/Sway config, using `exec` command
 
 
 ## API
@@ -46,34 +55,37 @@ Takes a callback with one parameter, `Connection`
 
 **Example:**
 ```lua
-require"i3ipc".main(function(conn)
+local i3ipc = require("i3ipc")
+i3ipc.main(function(conn)
   -- Invoke methods on `conn`
 end)
 ```
 
 
-### `Connection`
+### Class `Connection`
 A wrapper around [unix socket](https://en.wikipedia.org/wiki/Unix_domain_socket)
 connection to Sway/I3 socket.
 
 
-### `Connection:new()`
+#### `Connection:new()`
 Initialize connection.
 
 **Returns:** `Connection`.
 
 
-### `Connection:send(type, payload)`
+#### `Connection:send(type, payload)`
+
 Send a message to socket.
 
 **Parameters:**
 - `type`: [i3.COMMAND](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3)
 - `payload`: `string` - raw payload
 
-**Returns:** reply, (e.g. `{ {success = true} }`).
+**Returns:** IPC reply, (i.e. `{ { success = true } }`).
 
 
-### `Connection:command(command)`
+#### `Connection:command(command)`
+
 Send a command.
 Equivalent to `Connection:send(i3.COMMAND.RUN_COMMAND, command)`.
 
@@ -83,12 +95,12 @@ Equivalent to `Connection:send(i3.COMMAND.RUN_COMMAND, command)`.
 **Returns:** command reply, (e.g. `{ {success = true} }`).
 
 
-### `Connection:on(event, callback)`
+#### `Connection:on(event, callback)`
 Subscribe to event.
 
 **Parameters:**
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
-- `callback`: `function` - function with two parameters: `Connection` and event
+- `callback`: `function` - function with event as a parameter
 
 **Example:**
 ```lua
@@ -98,15 +110,15 @@ end)
 ```
 
 
-### `Connection:once(event, callback)`
+#### `Connection:once(event, callback)`
 Subscribe to event, unsubscribe after one is received.
 
 **Parameters:**
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
-- `callback`: `function` - function with two parameters: `Connection` and event
+- `callback`: `function` - function with event as a parameter.
 
 
-### `Connection:off(event, callback)`
+#### `Connection:off(event, callback)`
 Remove subscription to event.
 
 **Parameters:**
@@ -114,18 +126,18 @@ Remove subscription to event.
 - `callback`: `function` - previously registered callback
 
 
-### `Connection:get_tree()`
+#### `Connection:get_tree()`
 Get layout tree.
 
-**Returns:** `Tree`.
+**Returns:** [`Tree`](#class-tree).
 
 
-### `Tree`
+### Class `Tree`
 A Lua table, representing tree layout, with additional methods that are
 accessible via metatable.
 
 
-### `Tree:find_con(predicate)`
+#### `Tree:find_con(predicate)`
 Find `con` by predicate.
 
 **Parameters:**
@@ -144,63 +156,80 @@ end)
 ```
 
 
-### `Tree:find_focused()`
+#### `Tree:find_focused()`
 Find focused node.
 
 **Returns:** focused `con`.
 
 
-### `Connection:get_*`
-Bound methods for `Connection` in lowercase that correspond to `GET_*`
-commands in the [spec (Table #1)](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3).
+#### `Tree:walk_focus(cb)`
+Traverse `con`'s through `focus` array on each node. Useful for searching for a
+parent of the focused `con`, for example.
+
+**Returns:** focused `con`.
 
 
-### `Cmd`
+#### `Connection:get_*`
+Bound methods for `Connection` in lowercase that correspond to `GET_*` commands
+in the [spec](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3).
 
-A class for receiving commands from anyone through UNIX socket.
 
-TBD...
+### Class `Cmd`
+
+A member of [`Connection`](#class-connection) class for receiving commands from
+anyone through UNIX socket.
+
+#### `Cmd:on(command, callback)`
+register a handler for the command.
+
+**Parameters:**
+- `predicate`: `function` - function with parameter that represents `con`
+and return true if that `con` matches
+
 
 ## Example
 
-```lua
-local i3 = require"i3ipc"
-local EVENT, COMMAND = i3.EVENT, i3.COMMAND
+1.  Display a notification when switching to a workspace:
 
-i3.main(function(conn)
-  conn:once("workspace", function(event)
-    local cmd = "exec notify-send 'switched to workspace %d'"
-    conn:command(cmd:format(event.current.name))
-  end)
-end)
-```
+    ```lua
+    local i3 = require"i3ipc"
+    local EVENT, COMMAND = i3.EVENT, i3.COMMAND
+    i3.main(function(conn)
+      conn:once("workspace", function(event)
+        local cmd = "exec notify-send 'switched to workspace %d'"
+        conn:command(cmd:format(event.current.name))
+      end)
+    end)
+    ```
 
-```lua
-local i3 = require("i3ipc")
-local ipc = Connection:new { cmd = true }
-ipc:main(function())
-  local focus_now, focus_prev
-  do
-    local focused_con = ipc:get_tree():find_focused()
-    if focused_con then
-      focus_now = focused_con.id
-    end
-  end
-  ipc.cmd:on("focus_prev", function()
-    if not focus_prev then return end
-    ipc:command(("[con_id=%d] focus"):format(focus_prev))
-  end)
-  ipc:on("window::focus", function(ipc, event)
-    focus_prev = focus_now
-    focus_now = event.container.id
-  end)
-end)
-```
+1.  Switch back-and-forth between windows (Like Alt+F4 on some DE's):
 
-...and then, in your `bindsym`:
-```bash
-$ i3ipc-cmd focus_prev
-```
+    ```lua
+    local i3 = require("i3ipc")
+    local ipc = Connection:new()
+    ipc:main(function()
+      local focus_now, focus_prev
+      do
+        local focused_con = ipc:get_tree():find_focused()
+        if focused_con then
+          focus_now = focused_con.id
+        end
+      end
+      ipc.cmd:on("focus_prev", function()
+        if not focus_prev then return end
+        ipc:command(("[con_id=%d] focus"):format(focus_prev))
+      end)
+      ipc:on("window::focus", function(ipc, event)
+        focus_prev = focus_now
+        focus_now = event.container.id
+      end)
+    end)
+    ```
 
+    then, in sway config, add the following `bindsym`:
 
-Also check out [examples](./examples) for more useful snippets.
+    ```
+    bindsym $mod+Tab nop focus_prev
+    ```
+
+~~Also check out [examples](./examples) for more useful snippets.~~
