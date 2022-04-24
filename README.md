@@ -232,4 +232,4 @@ and return true if that `con` matches
     bindsym $mod+Tab nop focus_prev
     ```
 
-~~Also check out [examples](./examples) for more useful snippets.~~
+Also check out [examples](./examples) for more useful snippets.
