@@ -12,22 +12,28 @@ local Connection = {}
 Connection.__index = Connection
 
 local function is_builtin_event(e)
-  if type(e) ~= "table" or #e ~= 2 then return false end
+  if type(e) ~= "table" or #e ~= 2 then
+    return false
+  end
   for _, v in pairs(p.EVENT) do
-    if v[1] == e[1] and v[2] == e[2] then return true end
+    if v[1] == e[1] and v[2] == e[2] then
+      return true
+    end
   end
   return false
 end
 
 local function parse_header(raw)
   local magic, len, type = struct.unpack("< c6 i4 i4", raw)
-  if magic ~= p.MAGIC then return false end
+  if magic ~= p.MAGIC then
+    return false
+  end
   return true, len, type
 end
 
 local function serialize(type, payload)
   payload = payload or ""
-  return struct.pack("< c6 i4 i4", p.MAGIC, #payload, type)..payload
+  return struct.pack("< c6 i4 i4", p.MAGIC, #payload, type) .. payload
 end
 
 function Connection._get_sockpath()
@@ -117,14 +123,16 @@ end
 local function resolve_event(event)
   if is_builtin_event(event) then
     -- i.e. EVENT.WINDOW
-    return {{ id = event[1], name = event[2] }}
+    return { { id = event[1], name = event[2] } }
   elseif type(event) == "string" then
     -- i.e. "window::new" or just "window"
     local name, change = event:match("(%w+)::(%w+)")
-    if name == nil then name = event end
+    if name == nil then
+      name = event
+    end
     for _, v in pairs(p.EVENT) do
       if v[2] == name then
-        return {{ id = v[1], name = v[2], change = change }}
+        return { { id = v[1], name = v[2], change = change } }
       end
     end
   elseif type(event) == "table" then
@@ -197,7 +205,9 @@ end
 
 function Connection:_has_subscriptions()
   for _, h in pairs(self.handlers) do
-    if #h > 0 then return true end
+    if #h > 0 then
+      return true
+    end
   end
   return false
 end
@@ -236,10 +246,10 @@ function Connection:main(fn)
     end
   end)()
   local function handle_signal(signal)
-    print("Received signal "..signal)
+    print("Received signal " .. signal)
     self:_stop()
   end
-  for _, signal in ipairs {"sigint", "sigterm"} do
+  for _, signal in ipairs({ "sigint", "sigterm" }) do
     local s = uv.new_signal()
     s:start(signal, handle_signal)
   end

@@ -1,7 +1,9 @@
 local Reader = {}
 Reader.__index = Reader
 
-local function pass_through(data) return data end
+local function pass_through(data)
+  return data
+end
 
 -- The `parse` function shall return either
 -- - nil, if the message can't be parsed

@@ -18,7 +18,9 @@ function Cmd:setup()
     for word in event.binding.command:gmatch("[^%s]+") do
       table.insert(words, word)
     end
-    if words[1] ~= "nop" then return end
+    if words[1] ~= "nop" then
+      return
+    end
     table.remove(words, 1)
     if self.prefix ~= nil then
       if words[1] ~= self.prefix then
@@ -26,9 +28,13 @@ function Cmd:setup()
       end
       table.remove(words, 1)
     end
-    if #words == 0 then return end
+    if #words == 0 then
+      return
+    end
     local cmd = table.remove(words, 1)
-    for h, _ in pairs(self.handlers[cmd] or {}) do h(unpack(words)) end
+    for h, _ in pairs(self.handlers[cmd] or {}) do
+      h(unpack(words))
+    end
   end)
 end
 

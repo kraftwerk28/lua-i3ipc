@@ -14,6 +14,7 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
   - [Connection](#class-connection)
   - [Tree](#class-tree)
   - [Cmd](#class-cmd)
+  - [Traverse options](#traverse-options)
 
 
 ## Installation and running the script
@@ -137,12 +138,13 @@ A Lua table, representing tree layout, with additional methods that are
 accessible via metatable.
 
 
-#### `Tree:find_con(predicate)`
+#### `Tree:find_con(predicate, opts)`
 Find `con` by predicate.
 
 **Parameters:**
 - `predicate`: `function` - function with parameter that represents `con`
 and return true if that `con` matches
+- `opts`: `table | nil` - [traverse options](#traverse-options)
 
 **Returns:** matched `con`, or `nil`.
 
@@ -155,6 +157,13 @@ i3.main(function(ipc)
 end)
 ```
 
+#### `Tree:find_all(predicate, opts)`
+Find all matched `con`'s by predicate.
+
+**Parameters:**
+- `predicate`: `function` - function with parameter that represents `con`
+and return true if that `con` matches
+- `opts`: `table | nil` - [traverse options](#traverse-options)
 
 #### `Tree:find_focused()`
 Find focused node.
@@ -187,7 +196,19 @@ register a handler for the command.
 and return true if that `con` matches
 
 
-## Example
+### Traverse options
+
+Is a table with the following type
+
+```lua
+{
+  search_method = "bfs" | "dfs" | nil, -- default "bfs"
+  check_only = "tiling" | "floating" | nil, -- default "tiling"
+}
+```
+
+
+## Examples
 
 1.  Display a notification when switching to a workspace:
 
@@ -231,5 +252,6 @@ and return true if that `con` matches
     ```
     bindsym $mod+Tab nop focus_prev
     ```
+
 
 Also check out [examples](./examples) for more useful snippets.

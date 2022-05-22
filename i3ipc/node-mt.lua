@@ -1,7 +1,7 @@
 local wrap_node
 
 local function find_bfs_dfs(node, predicate, opts, check_all)
-  local queue = {node}
+  local queue = { node }
   local found = {}
   while #queue > 0 do
     local cur
@@ -59,7 +59,11 @@ function node_mt:walk_focus(predicate)
       return wrap_node(cur)
     end
     if #(cur.focus or {}) == 0 then
-      if predicate then return nil else return cur end
+      if predicate then
+        return nil
+      else
+        return cur
+      end
     end
     local focus_id = cur.focus[1]
     for _, child in ipairs(cur.nodes) do
@@ -79,7 +83,9 @@ function node_mt:walk_focus(predicate)
 end
 
 function node_mt:find_focused()
-  return self:walk_focus(function(n) return n.focused end)
+  return self:walk_focus(function(n)
+    return n.focused
+  end)
 end
 
 wrap_node = function(node)
