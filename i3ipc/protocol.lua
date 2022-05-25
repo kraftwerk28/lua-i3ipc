@@ -18,6 +18,7 @@ M.COMMAND = {
   SEND_TICK = 10, -- Sends a tick event with the specified payload.
   SYNC = 11, -- Sends an i3 sync event with the specified random value to the specified window.
   GET_BINDING_STATE = 12, -- Request the current binding state, i.e. the currently active binding mode name.
+
   -- Sway-only
   GET_INPUTS = 100,
   GET_SEATS = 101,

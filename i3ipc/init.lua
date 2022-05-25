@@ -69,6 +69,8 @@ function Connection:new()
     cmd_result_reader = Reader:new(),
     pipe = pipe,
     handlers = {},
+    -- Cache IPC subscriptions to avoid multiple calls to `subscribe` with the
+    -- same update type
     subscribed_to = {},
     main_finished = false,
   }, self)
@@ -110,7 +112,6 @@ function Connection:connect_socket(sockpath)
     end
     self.ipc_reader:push(chunk)
   end)
-  self.cmd:setup()
 end
 
 function Connection:send(type, payload)
@@ -214,6 +215,11 @@ end
 
 function Connection:_stop()
   self.pipe:read_stop()
+  local co = coroutine.running()
+  self.pipe:close(function()
+    assert(coroutine.resume(co))
+  end)
+  coroutine.yield()
   uv.stop()
 end
 
@@ -235,19 +241,20 @@ for method, cmd in pairs(p.COMMAND) do
   end
 end
 
-function Connection:main(fn)
+function Connection:main(callback)
   coroutine.wrap(function()
     self:connect_socket()
-    fn(self)
+    callback(self)
     if self:_has_subscriptions() then
       self.main_finished = true
     else
       self:_stop()
     end
   end)()
-  local function handle_signal(signal)
-    print("Received signal " .. signal)
-    self:_stop()
+  local function handle_signal()
+    coroutine.wrap(function()
+      self:_stop()
+    end)()
   end
   for _, signal in ipairs({ "sigint", "sigterm" }) do
     local s = uv.new_signal()
