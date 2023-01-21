@@ -1,4 +1,3 @@
-#!/usr/bin/env luajit
 -- Switch to prev/next tab in topmost tabbed layout
 local i3 = require("i3ipc")
 i3.main(function(ipc)

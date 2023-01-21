@@ -1,4 +1,3 @@
-#!/usr/bin/env luajit
 local i3 = require("i3ipc")
 
 local current_focused, previous_focused
