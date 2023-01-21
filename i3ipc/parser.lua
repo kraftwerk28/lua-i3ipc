@@ -1,7 +1,9 @@
 local json = require("cjson")
 local ffi = require("ffi")
 
-local I3IPC_MAGIC = "i3-ipc"
+local protocol = require("i3ipc.protocol")
+
+local I3IPC_MAGIC = protocol.MAGIC
 
 ffi.cdef([[
   #pragma pack(1)
@@ -14,7 +16,6 @@ ffi.cdef([[
 
 local header_ctor = ffi.typeof("struct i3ipc_header")
 local header_size = ffi.sizeof(header_ctor)
-print(header_size)
 
 local Parser = {}
 Parser.__index = Parser
