@@ -1,6 +1,5 @@
 require("i3ipc.pkgpath")
 
-local struct = require("struct")
 local uv = require("luv")
 local json = require("cjson")
 
@@ -23,14 +22,6 @@ local function is_builtin_event(e)
     end
   end
   return false
-end
-
-local function serialize(type, payload)
-  if payload then
-    return struct.pack("< c6 i4 i4", p.MAGIC, #payload, type) .. payload
-  else
-    return struct.pack("< c6 i4 i4", p.MAGIC, 0, type)
-  end
 end
 
 local function resolve_event(event)
@@ -135,7 +126,7 @@ end
 
 function Connection:send(type, payload)
   local event_id = type
-  local msg = serialize(event_id, payload)
+  local msg = Parser.serialize(event_id, payload)
   table.insert(self.result_waiters, coroutine.running())
   self.pipe:write(msg)
   return coroutine.yield()

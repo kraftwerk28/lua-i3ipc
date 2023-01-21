@@ -10,9 +10,7 @@ description = {
    license = "MIT"
 }
 dependencies = {
-   "lua ~> 5.1",
    "luv >= 1.42.0",
-   "struct >= 1.4",
    "lua-cjson >= 2.1.0.6",
 }
 build = {
