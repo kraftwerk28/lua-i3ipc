@@ -1,9 +1,8 @@
 #!/usr/bin/env luajit
 -- Switch to prev/next tab in topmost tabbed layout
 local i3 = require("i3ipc")
-local ipc = i3.Connection:new()
-ipc:main(function()
-  ipc.cmd:on("tab", function(arg)
+i3.main(function(ipc)
+  ipc.cmd:on("tab", function(ipc, arg)
     local tabbed_node = ipc:get_tree():walk_focus(function(n)
       return n.layout == "tabbed"
     end)
@@ -22,8 +21,8 @@ ipc:main(function()
     else
       focused_index = focused_index % nnodes + 1
     end
-    local to_be_focused =
-      i3.wrap_node(tabbed_node.nodes[focused_index]):walk_focus()
+    local to_be_focused = i3.wrap_node(tabbed_node.nodes[focused_index])
+      :walk_focus()
     ipc:command(("[con_id=%d] focus"):format(to_be_focused.id))
   end)
 end)

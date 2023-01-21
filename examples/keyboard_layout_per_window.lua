@@ -17,8 +17,8 @@ function ipc:get_keyboard_inputs()
   return r
 end
 
-ipc:main(function()
-  ipc:on("window::focus", function(event)
+ipc:main(function(ipc)
+  ipc:on("window::focus", function(ipc, event)
     previous_focused = current_focused
     local con_id = event.container.id
     local inputs = ipc:get_keyboard_inputs()
@@ -56,7 +56,7 @@ ipc:main(function()
     current_focused = con_id
   end)
 
-  ipc:on("window::close", function(event)
+  ipc:on("window::close", function(ipc, event)
     windows[event.container.id] = nil
   end)
 

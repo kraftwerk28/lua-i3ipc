@@ -28,10 +28,9 @@ function Reader:push(data, ...)
       self.partial = data
       break
     else
-      if self.coro_queue[1] then
-        -- print("[Producer] Resume the waiting coroutine")
-        assert(coroutine.resume(self.coro_queue[1], msg))
-        table.remove(self.coro_queue, 1)
+      local waiting_coro = table.remove(self.coro_queue, 1)
+      if waiting_coro ~= nil then
+        assert(coroutine.resume(waiting_coro, msg))
       else
         -- print("[Producer] No waiting coroutines, put message in a queue")
         table.insert(self.message_queue, msg)
@@ -42,20 +41,15 @@ function Reader:push(data, ...)
 end
 
 function Reader:add_awaiter(co)
-  if type(co) ~= "thread" then
-    error("Argument `co` must be of type `coroutine`")
-  end
+  assert(type(co) == "thread", "Argument `co` must be of type `coroutine`")
   table.insert(self.coro_queue, 1, co)
 end
 
 function Reader:recv()
-  if self.message_queue[1] then
-    -- print("[Consumer] Receiving a message from the queue")
-    local res = self.message_queue[1]
-    table.remove(self.message_queue, 1)
-    return res
+  local waiting_msg = table.remove(self.message_queue, 1)
+  if waiting_msg then
+    return waiting_msg
   else
-    -- print("[Consumer] No messages in the queue, yielding")
     table.insert(self.coro_queue, coroutine.running())
     return coroutine.yield()
   end

@@ -105,7 +105,7 @@ Subscribe to event.
 
 **Example:**
 ```lua
-conn:on(i3.EVENT.WINDOW, function(event)
+conn:on(i3.EVENT.WINDOW, function(ipc, event)
   print(event.container.name)
 end)
 ```
@@ -216,7 +216,7 @@ Is a table with the following type
     local i3 = require"i3ipc"
     local EVENT, COMMAND = i3.EVENT, i3.COMMAND
     i3.main(function(conn)
-      conn:once("workspace", function(event)
+      conn:once("workspace", function(ipc, event)
         local cmd = "exec notify-send 'switched to workspace %d'"
         conn:command(cmd:format(event.current.name))
       end)
@@ -236,7 +236,7 @@ Is a table with the following type
           focus_now = focused_con.id
         end
       end
-      ipc.cmd:on("focus_prev", function()
+      ipc.cmd:on("focus_prev", function(ipc)
         if not focus_prev then return end
         ipc:command(("[con_id=%d] focus"):format(focus_prev))
       end)
