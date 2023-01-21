@@ -113,7 +113,7 @@ function Connection:_on_message(msg)
     -- This is a command result
     local waiter_coro = table.remove(self.result_waiters, 1)
     if waiter_coro then
-      coroutine.resume(waiter_coro, msg.payload)
+      assert(coroutine.resume(waiter_coro, msg.payload))
     end
   end
 end
