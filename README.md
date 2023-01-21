@@ -6,7 +6,6 @@ A Lua (LuaJIT) framework for controlling [i3wm](https://i3wm.org/) and
 
 Currently supports Lua 5.1 (LuaJIT 2.0.5)
 
-
 ## Table of contents
 
 - #### [Installation](#installation-and-running-the-script)
@@ -16,45 +15,53 @@ Currently supports Lua 5.1 (LuaJIT 2.0.5)
   - [Cmd](#class-cmd)
   - [Traverse options](#traverse-options)
 
+## Installation and running
 
-## Installation and running the script
+1. Install the library
 
-1.  Install the library
+   - **Arch Linux**
 
-    <details>
-        <summary>Arch Linux</summary>
-        Install the `lua-i3ipc-git` package with any AUR helper, i.e.:
-        `$ yay -S lua-i3ipc-git`.
-    </details>
+     Install the `lua-i3ipc-git` package with an AUR helper of your choice:
 
-2.  Create a file, i.e. `myscript.lua` and import the library:
-    ```lua
-    #!/usr/bin/env luajit
-    local i3 = require("i3ipc")
-    i3.main(function(ipc)
-      -- code
-    end)
-    ```
+     ```sh
+     $ yay -S lua-i3ipc-git
+     ```
 
-3.  Make the script executable:
-    ```bash
-    $ chmod u+x myscript.lua
-    ```
+2. Create a file, i.e. `myscript.lua` and import the library:
+
+   ```lua
+   -- myscript.lua
+   #!/usr/bin/env luajit
+   local i3 = require("i3ipc")
+   i3.main(function(ipc)
+     local tree = ipc:get_tree()
+     local focused_node = tree:find_focused()
+     print("app_id: " .. focused_node.app_id)
+     print("name:   " .. focused_node.name)
+   end)
+   ```
+
+3. Make the script executable:
+
+   ```bash
+   $ chmod 744 myscript.lua
+   ```
 
 4. Put the script invocation in your i3/Sway config, using `exec` command
 
-
 ## API
 
-
 ### `main(callback)`
+
 The entry point of the library, which you typically would use
 Takes a callback with one parameter, `Connection`
 
 **Parameters:**
+
 - `callback`: `function` - function with one parameter (`Connection`)
 
 **Example:**
+
 ```lua
 local i3ipc = require("i3ipc")
 i3ipc.main(function(conn)
@@ -62,28 +69,27 @@ i3ipc.main(function(conn)
 end)
 ```
 
-
 ### Class `Connection`
+
 A wrapper around [unix socket](https://en.wikipedia.org/wiki/Unix_domain_socket)
 connection to Sway/I3 socket.
 
-
 #### `Connection:new()`
+
 Initialize connection.
 
 **Returns:** `Connection`.
-
 
 #### `Connection:send(type, payload)`
 
 Send a message to socket.
 
 **Parameters:**
+
 - `type`: [i3.COMMAND](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3)
 - `payload`: `string` - raw payload
 
 **Returns:** IPC reply, (i.e. `{ { success = true } }`).
-
 
 #### `Connection:command(command)`
 
@@ -91,64 +97,71 @@ Send a command.
 Equivalent to `Connection:send(i3.COMMAND.RUN_COMMAND, command)`.
 
 **Parameters:**
+
 - `command`: `string` - command to send
 
 **Returns:** command reply, (e.g. `{ {success = true} }`).
 
-
 #### `Connection:on(event, callback)`
+
 Subscribe to event.
 
 **Parameters:**
+
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
 - `callback`: `function` - function with event as a parameter
 
 **Example:**
+
 ```lua
 conn:on(i3.EVENT.WINDOW, function(ipc, event)
   print(event.container.name)
 end)
 ```
 
-
 #### `Connection:once(event, callback)`
+
 Subscribe to event, unsubscribe after one is received.
 
 **Parameters:**
+
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
 - `callback`: `function` - function with event as a parameter.
 
-
 #### `Connection:off(event, callback)`
+
 Remove subscription to event.
 
 **Parameters:**
+
 - `event`: [i3.EVENT](https://i3wm.org/docs/ipc.html#_reply_format)
 - `callback`: `function` - previously registered callback
 
-
 #### `Connection:get_tree()`
+
 Get layout tree.
 
 **Returns:** [`Tree`](#class-tree).
 
-
 ### Class `Tree`
+
 A Lua table, representing tree layout, with additional methods that are
 accessible via metatable.
 
-
 #### `Tree:find_con(predicate, opts)`
+
 Find `con` by predicate.
 
 **Parameters:**
+
 - `predicate`: `function` - function with parameter that represents `con`
-and return true if that `con` matches
+  and return true if that `con` matches
 - `opts`: `table | nil` - [traverse options](#traverse-options)
 
 **Returns:** matched `con`, or `nil`.
 
 **Example:**
+
 ```lua
 i3.main(function(ipc)
   local firefox = ipc:get_tree():find_con(function(con)
@@ -158,30 +171,32 @@ end)
 ```
 
 #### `Tree:find_all(predicate, opts)`
+
 Find all matched `con`'s by predicate.
 
 **Parameters:**
+
 - `predicate`: `function` - function with parameter that represents `con`
-and return true if that `con` matches
+  and return true if that `con` matches
 - `opts`: `table | nil` - [traverse options](#traverse-options)
 
 #### `Tree:find_focused()`
+
 Find focused node.
 
 **Returns:** focused `con`.
 
-
 #### `Tree:walk_focus(cb)`
+
 Traverse `con`'s through `focus` array on each node. Useful for searching for a
 parent of the focused `con`, for example.
 
 **Returns:** focused `con`.
 
-
 #### `Connection:get_*`
+
 Bound methods for `Connection` in lowercase that correspond to `GET_*` commands
 in the [spec](https://i3wm.org/docs/ipc.html#_sending_messages_to_i3).
-
 
 ### Class `Cmd`
 
@@ -189,12 +204,13 @@ A member of [`Connection`](#class-connection) class for receiving commands from
 anyone through UNIX socket.
 
 #### `Cmd:on(command, callback)`
+
 register a handler for the command.
 
 **Parameters:**
-- `predicate`: `function` - function with parameter that represents `con`
-and return true if that `con` matches
 
+- `predicate`: `function` - function with parameter that represents `con`
+  and return true if that `con` matches
 
 ### Traverse options
 
@@ -206,7 +222,6 @@ Is a table with the following type
   check_only = "tiling" | "floating" | nil, -- default "tiling"
 }
 ```
-
 
 ## Examples
 
@@ -252,6 +267,5 @@ Is a table with the following type
     ```
     bindsym $mod+Tab nop focus_prev
     ```
-
 
 Also check out [examples](./examples) for more useful snippets.
