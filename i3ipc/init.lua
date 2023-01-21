@@ -1,4 +1,4 @@
--- require("i3ipc.pkgpath")
+require("i3ipc.pkgpath")
 
 local struct = require("struct")
 local uv = require("luv")
