@@ -8,7 +8,6 @@ function Cmd:new(conn)
     conn = conn,
     -- { [command] = { handler1, handler2, ... } }
     handlers = {},
-    subscribed_to_binding = false,
   }, self)
 end
 
@@ -79,7 +78,7 @@ function Cmd:set_prefix(prefix)
 end
 
 function Cmd:on(command, callback)
-  if not self.subscribed_to_binding then
+  if not self.conn:_is_subscribed_to("binding") then
     self:setup()
   end
   self.handlers[command] = self.handlers[command] or {}

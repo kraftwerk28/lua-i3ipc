@@ -71,7 +71,6 @@ function Connection:new()
     pipe = pipe,
     parser = parser,
     handlers = {},
-    cmd_handlers = {},
     result_waiters = {},
     -- Cache IPC subscriptions to avoid multiple calls to `subscribe` with the
     -- same update type
@@ -243,6 +242,16 @@ function Connection:_stop()
   end)
   coroutine.yield()
   uv.stop()
+end
+
+function Connection:_is_subscribed_to(event)
+  local evd = resolve_event(event)
+  for _, e in ipairs(evd) do
+    if not self.subscribed_to[e.name] then
+      return false
+    end
+  end
+  return true
 end
 
 local function main(fn)
