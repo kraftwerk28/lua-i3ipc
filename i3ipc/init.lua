@@ -72,6 +72,7 @@ function Connection:new()
     parser = parser,
     handlers = {},
     result_waiters = {},
+    message_queue = {},
     -- Cache IPC subscriptions to avoid multiple calls to `subscribe` with the
     -- same update type
     subscribed_to = {},
@@ -84,26 +85,44 @@ function Connection:new()
     conn:_on_message(msg)
   end)
 
+  conn.consumer_coro = coroutine.create(function()
+    conn:_consume_events()
+  end)
+  coroutine.resume(conn.consumer_coro)
+
   return conn
+end
+
+function Connection:_consume_events()
+  while true do
+    coroutine.yield()
+    while #self.message_queue > 0 do
+      local msg = self.message_queue[1]
+      -- MSB of msg.type == 1, so this is an event
+      local handlers = self.handlers[msg.type] or {}
+      for _, handler in pairs(handlers) do
+        if handler.change == nil or msg.payload.change == handler.change then
+          handler.callback(self, msg.payload)
+        end
+      end
+      table.remove(self.message_queue, 1)
+    end
+  end
 end
 
 function Connection:_on_message(msg)
   local event_id = bit.band(msg.type, 0x7fffffff)
-  if event_id ~= msg.type then
-    -- MSB of msg.type == 1, so this is an event
-    local handlers = self.handlers[event_id] or {}
-    for _, handler in pairs(handlers) do
-      if handler.change == nil or msg.payload.change == handler.change then
-        coroutine.wrap(function()
-          handler.callback(self, msg.payload)
-        end)()
-      end
-    end
-  else
+  if event_id == msg.type then
     -- This is a command result
     local waiter_coro = table.remove(self.result_waiters, 1)
     if waiter_coro then
       assert(coroutine.resume(waiter_coro, msg.payload))
+    end
+  else
+    msg.type = event_id
+    table.insert(self.message_queue, msg)
+    if #self.message_queue == 1 then
+      assert(coroutine.resume(self.consumer_coro))
     end
   end
 end
@@ -129,7 +148,6 @@ function Connection:send(type, payload)
   table.insert(self.result_waiters, coroutine.running())
   self.pipe:write(msg)
   return coroutine.yield()
-  -- return self.cmd_result_reader:recv()
 end
 
 function Connection:on(event, callback)
