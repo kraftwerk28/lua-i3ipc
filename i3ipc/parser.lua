@@ -40,7 +40,8 @@ function Parser:_parse_packet()
   if #self.buf < header_size then
     return
   end
-  local header = ffi.cast("struct i3ipc_header *", self.buf:sub(1, header_size))
+  local header = header_ctor()
+  ffi.copy(header, self.buf:sub(1, header_size))
   if #self.buf < header_size + header.len then
     -- Buffer still too small
     return
