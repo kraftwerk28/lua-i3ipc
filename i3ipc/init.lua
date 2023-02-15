@@ -1,5 +1,3 @@
-require("i3ipc.pkgpath")
-
 local uv = require("luv")
 local json = require("cjson")
 
