@@ -1,8 +1,5 @@
 local uv = require("luv")
-local ok, json = pcall(require, "cjson")
-if not ok then
-  json = require("i3ipc.cjson")
-end
+local json = require("cjson")
 
 local Parser = require("i3ipc.parser")
 -- local Reader = require("i3ipc.reader")
