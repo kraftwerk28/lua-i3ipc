@@ -93,6 +93,10 @@ function Connection:new()
   return conn
 end
 
+--
+-- Private methods:
+--
+
 function Connection:_consume_events()
   while true do
     coroutine.yield()
@@ -127,7 +131,33 @@ function Connection:_on_message(msg)
   end
 end
 
-function Connection:connect_socket(sockpath)
+function Connection:_has_subscriptions()
+  for _, h in pairs(self.handlers) do
+    if #h > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+function Connection:_stop()
+  self.pipe:read_stop()
+  self.pipe:close(function()
+    uv.stop()
+  end)
+end
+
+function Connection:_is_subscribed_to(event)
+  local evd = resolve_event(event)
+  for _, e in ipairs(evd) do
+    if not self.subscribed_to[e.name] then
+      return false
+    end
+  end
+  return true
+end
+
+function Connection:_connect_socket(sockpath)
   sockpath = sockpath or get_sockpath()
   local co = coroutine.running()
   self.pipe:connect(sockpath, function()
@@ -135,12 +165,23 @@ function Connection:connect_socket(sockpath)
   end)
   coroutine.yield()
   self.pipe:read_start(function(err, chunk)
-    if err ~= nil or chunk == nil then
-      return
+    if err then
+      self:_stop()
+    elseif chunk then
+      self.parser:parse(chunk)
     end
-    self.parser:parse(chunk)
   end)
 end
+
+function Connection:_subscribe_shutdown()
+  self:once(p.EVENT.SHUTDOWN, function(ipc)
+    ipc:_stop()
+  end)
+end
+
+--
+-- Public methods:
+--
 
 function Connection:send(type, payload)
   local event_id = type
@@ -232,7 +273,8 @@ function Connection:main(callback)
     s:start(signal, handle_signal)
   end
   coroutine.wrap(function()
-    self:connect_socket()
+    self:_connect_socket()
+    self:_subscribe_shutdown()
     callback(self)
     if self:_has_subscriptions() then
       self.main_finished = true
@@ -241,35 +283,6 @@ function Connection:main(callback)
     end
   end)()
   uv.run()
-end
-
-function Connection:_has_subscriptions()
-  for _, h in pairs(self.handlers) do
-    if #h > 0 then
-      return true
-    end
-  end
-  return false
-end
-
-function Connection:_stop()
-  self.pipe:read_stop()
-  local co = coroutine.running()
-  self.pipe:close(function()
-    assert(coroutine.resume(co))
-  end)
-  coroutine.yield()
-  uv.stop()
-end
-
-function Connection:_is_subscribed_to(event)
-  local evd = resolve_event(event)
-  for _, e in ipairs(evd) do
-    if not self.subscribed_to[e.name] then
-      return false
-    end
-  end
-  return true
 end
 
 local function main(fn)
